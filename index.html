@@ -79,74 +79,181 @@
 </nav>
 <div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
 <script>
-// ===== SUPABASE AUTH (ASUH V11) =====
-const SUPABASE_URL="https://wkikqjyfjlwggfidfmng.supabase.co";
+// ===== SUPABASE AUTH + DATA SYNC (ASUH) =====
+const SUPABASE_URL="https://wkiqjyfjlwggfidfmng.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY="sb_publishable_d1RgTa22tAbM6j_pcpNbZQ_egod72Zy";
+
 let authMode="login";
 let asuhSession=null;
-function authHeaders(token){let h={"apikey":SUPABASE_PUBLISHABLE_KEY,"Content-Type":"application/json"};if(token)h.Authorization="Bearer "+token;return h}
-function setAuthMessage(msg,ok=false){let el=document.getElementById("authMsg");if(!el)return;el.textContent=msg||"";el.classList.toggle("ok",!!ok)}
-function toggleAuthMode(){authMode=authMode==="login"?"signup":"login";document.getElementById("authTitle").textContent=authMode==="login"?"Log masuk untuk teruskan":"Daftar akaun ASUH";document.getElementById("authSubmit").textContent=authMode==="login"?"Log Masuk":"Daftar Akaun";document.getElementById("authSwitch").textContent=authMode==="login"?"Belum ada akaun? Daftar":"Sudah ada akaun? Log masuk";setAuthMessage("")}
-async function submitAuth(){
- const email=(document.getElementById("authEmail").value||"").trim();const password=document.getElementById("authPassword").value||"";
- if(!email||password.length<6)return setAuthMessage("Masukkan e-mel dan kata laluan sekurang-kurangnya 6 aksara.");
- setAuthMessage("Sedang memproses...");
- try{
-  const endpoint=authMode==="login"?"/auth/v1/token?grant_type=password":"/auth/v1/signup";
-  const r=await fetch(SUPABASE_URL+endpoint,{method:"POST",headers:authHeaders(),body:JSON.stringify({email,password})});
-  const d=await r.json();if(!r.ok)throw new Error(d.msg||d.message||d.error_description||"Tidak berjaya.");
-  if(authMode==="signup"&&!d.access_token){setAuthMessage("Pendaftaran berjaya. Semak e-mel untuk pengesahan, kemudian log masuk.",true);authMode="login";document.getElementById("authTitle").textContent="Log masuk untuk teruskan";document.getElementById("authSubmit").textContent="Log Masuk";document.getElementById("authSwitch").textContent="Belum ada akaun? Daftar";return}
-  asuhSession=d;try{localStorage.setItem("asuh_supabase_session",JSON.stringify(d))}catch(e){}
-  document.getElementById("authGate").classList.add("authHidden");
-  setAuthMessage("");
-  await loadCloudData();
- }catch(e){setAuthMessage(e.message||"Log masuk tidak berjaya.")}
-}
-function restoreAuth(){try{let d=JSON.parse(localStorage.getItem("asuh_supabase_session")||"null");if(d&&d.access_token){asuhSession=d;document.getElementById("authGate").classList.add("authHidden");return true}}catch(e){}return false}
-function asuhLogout(){try{localStorage.removeItem("asuh_supabase_session")}catch(e){}asuhSession=null;document.getElementById("authGate").classList.remove("authHidden")}
+let cloudLoading=false;
+let cloudSaveTimer=null;
 
-// ===== SUPABASE DATA SYNC (ASUH V11.5) =====
-let cloudLoading=false, cloudSaveTimer=null;
-function cloudPayload(){return {familyName,familyMembers,K,rewards,savedTasks,lastDay:localDayKey()}}
-async function loadCloudData(){
- if(!asuhSession||!asuhSession.access_token||!asuhSession.user||!asuhSession.user.id)return false;
- cloudLoading=true;
- try{
-  const uid=asuhSession.user.id;
-  const r=await fetch(SUPABASE_URL+"/rest/v1/asuh_data?user_id=eq."+encodeURIComponent(uid)+"&select=id,data&order=created_at.desc&limit=1",{headers:authHeaders(asuhSession.access_token)});
-  if(!r.ok)throw new Error("Gagal membaca data awan.");
-  const rows=await r.json();
-  if(rows.length&&rows[0].data){
-   const d=rows[0].data;
-   if(d.familyName)familyName=d.familyName;
-   if(Array.isArray(d.familyMembers))familyMembers=d.familyMembers;
-   if(d.K){Object.keys(K).forEach(x=>delete K[x]);Object.assign(K,d.K)}
-   if(Array.isArray(d.rewards))rewards=d.rewards;
-   if(Array.isArray(d.savedTasks))savedTasks=d.savedTasks;
-   try{localStorage.setItem("asuh_fasa1_"+asuhSession.user.id",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
-   render();
-   return true;
+function authHeaders(token){
+  const h={"apikey":SUPABASE_PUBLISHABLE_KEY,"Content-Type":"application/json"};
+  if(token)h.Authorization="Bearer "+token;
+  return h;
+}
+function setAuthMessage(msg,ok=false){
+  const el=document.getElementById("authMsg");
+  if(!el)return;
+  el.textContent=msg||"";
+  el.classList.toggle("ok",!!ok);
+}
+function toggleAuthMode(){
+  authMode=authMode==="login"?"signup":"login";
+  document.getElementById("authTitle").textContent=authMode==="login"?"Log masuk untuk teruskan":"Daftar akaun ASUH";
+  document.getElementById("authSubmit").textContent=authMode==="login"?"Log Masuk":"Daftar Akaun";
+  document.getElementById("authSwitch").textContent=authMode==="login"?"Belum ada akaun? Daftar":"Sudah ada akaun? Log masuk";
+  setAuthMessage("");
+}
+function userStorageKey(){
+  return asuhSession&&asuhSession.user&&asuhSession.user.id
+    ? "asuh_fasa1_"+asuhSession.user.id
+    : null;
+}
+function userDayKey(){
+  return asuhSession&&asuhSession.user&&asuhSession.user.id
+    ? "asuh_last_day_"+asuhSession.user.id
+    : null;
+}
+function cloudPayload(){
+  return {familyName,familyMembers,K,rewards,savedTasks,lastDay:localDayKey()};
+}
+async function submitAuth(){
+  const email=(document.getElementById("authEmail").value||"").trim();
+  const password=document.getElementById("authPassword").value||"";
+  if(!email||password.length<6){
+    return setAuthMessage("Masukkan e-mel dan kata laluan sekurang-kurangnya 6 aksara.");
   }
-  return false
- }catch(e){console.warn("ASUH cloud load:",e)}finally{cloudLoading=false}
- return false;
+  setAuthMessage("Sedang memproses...");
+  try{
+    const endpoint=authMode==="login"?"/auth/v1/token?grant_type=password":"/auth/v1/signup";
+    const r=await fetch(SUPABASE_URL+endpoint,{
+      method:"POST",
+      headers:authHeaders(),
+      body:JSON.stringify({email,password})
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.msg||d.message||d.error_description||"Tidak berjaya.");
+
+    if(authMode==="signup"&&!d.access_token){
+      setAuthMessage("Pendaftaran berjaya. Semak e-mel untuk pengesahan, kemudian log masuk.",true);
+      authMode="login";
+      document.getElementById("authTitle").textContent="Log masuk untuk teruskan";
+      document.getElementById("authSubmit").textContent="Log Masuk";
+      document.getElementById("authSwitch").textContent="Belum ada akaun? Daftar";
+      return;
+    }
+
+    asuhSession=d;
+    try{localStorage.setItem("asuh_supabase_session",JSON.stringify(d))}catch(e){}
+    document.getElementById("authGate").classList.add("authHidden");
+    setAuthMessage("");
+    await startUserData();
+  }catch(e){
+    setAuthMessage(e.message||"Log masuk tidak berjaya.");
+  }
+}
+function restoreAuth(){
+  try{
+    const d=JSON.parse(localStorage.getItem("asuh_supabase_session")||"null");
+    if(d&&d.access_token&&d.user&&d.user.id){
+      asuhSession=d;
+      document.getElementById("authGate").classList.add("authHidden");
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function asuhLogout(){
+  try{localStorage.removeItem("asuh_supabase_session")}catch(e){}
+  asuhSession=null;
+  document.getElementById("authGate").classList.remove("authHidden");
+}
+async function loadCloudData(){
+  if(!asuhSession||!asuhSession.access_token||!asuhSession.user||!asuhSession.user.id)return false;
+  cloudLoading=true;
+  try{
+    const uid=asuhSession.user.id;
+    const r=await fetch(
+      SUPABASE_URL+"/rest/v1/asuh_data?user_id=eq."+encodeURIComponent(uid)+"&select=id,data&order=created_at.desc&limit=1",
+      {headers:authHeaders(asuhSession.access_token)}
+    );
+    if(!r.ok)throw new Error("Gagal membaca data awan.");
+    const rows=await r.json();
+    if(rows.length&&rows[0].data){
+      applyUserData(rows[0].data);
+      saveLocalOnly();
+      render();
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.warn("ASUH cloud load:",e);
+    return false;
+  }finally{
+    cloudLoading=false;
+  }
 }
 async function saveCloudData(immediate=false){
- if(cloudLoading||!asuhSession||!asuhSession.access_token||!asuhSession.user||!asuhSession.user.id)return;
- if(!immediate){clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>saveCloudData(true),350);return;}
- try{
-  const uid=asuhSession.user.id, headers=authHeaders(asuhSession.access_token);
-  const q=await fetch(SUPABASE_URL+"/rest/v1/asuh_data?user_id=eq."+encodeURIComponent(uid)+"&select=id&order=created_at.desc&limit=1",{headers});
-  if(!q.ok)throw new Error("Gagal menyemak data awan.");
-  const rows=await q.json(), body=JSON.stringify({user_id:uid,data:cloudPayload()});
-  let r;
-  if(rows.length){r=await fetch(SUPABASE_URL+"/rest/v1/asuh_data?id=eq."+encodeURIComponent(rows[0].id),{method:"PATCH",headers:{...headers,"Prefer":"return=minimal"},body})}
-  else{r=await fetch(SUPABASE_URL+"/rest/v1/asuh_data",{method:"POST",headers:{...headers,"Prefer":"return=minimal"},body:JSON.stringify({id:Date.now(),user_id:uid,data:cloudPayload()})})}
-  if(!r.ok)throw new Error("Gagal menyimpan data awan.");
- }catch(e){console.warn("ASUH cloud save:",e)}
+  if(cloudLoading||!asuhSession||!asuhSession.access_token||!asuhSession.user||!asuhSession.user.id)return;
+  if(!immediate){
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer=setTimeout(()=>saveCloudData(true),350);
+    return;
+  }
+  try{
+    const uid=asuhSession.user.id;
+    const headers=authHeaders(asuhSession.access_token);
+    const q=await fetch(
+      SUPABASE_URL+"/rest/v1/asuh_data?user_id=eq."+encodeURIComponent(uid)+"&select=id&order=created_at.desc&limit=1",
+      {headers}
+    );
+    if(!q.ok)throw new Error("Gagal menyemak data awan.");
+    const rows=await q.json();
+    const body=JSON.stringify({user_id:uid,data:cloudPayload()});
+    let r;
+    if(rows.length){
+      r=await fetch(
+        SUPABASE_URL+"/rest/v1/asuh_data?id=eq."+encodeURIComponent(rows[0].id),
+        {method:"PATCH",headers:{...headers,"Prefer":"return=minimal"},body}
+      );
+    }else{
+      r=await fetch(
+        SUPABASE_URL+"/rest/v1/asuh_data",
+        {method:"POST",headers:{...headers,"Prefer":"return=minimal"},body}
+      );
+    }
+    if(!r.ok)throw new Error("Gagal menyimpan data awan.");
+  }catch(e){
+    console.warn("ASUH cloud save:",e);
+  }
 }
-// ===== END SUPABASE DATA SYNC =====
-// ===== END SUPABASE AUTH =====
+function applyUserData(d){
+  if(!d)return;
+  if(d.familyName)familyName=d.familyName;
+  if(Array.isArray(d.familyMembers))familyMembers=d.familyMembers;
+  if(d.K){
+    Object.keys(K).forEach(x=>delete K[x]);
+    Object.assign(K,d.K);
+  }
+  if(Array.isArray(d.rewards))rewards=d.rewards;
+  if(Array.isArray(d.savedTasks))savedTasks=d.savedTasks;
+}
+async function startUserData(){
+  if(!asuhSession||!asuhSession.user||!asuhSession.user.id)return;
+  const gotCloud=await loadCloudData();
+  if(!gotCloud){
+    loadLocal();
+    resetTodayIfNewDay();
+    render();
+    await saveCloudData(true);
+  }else{
+    resetTodayIfNewDay();
+    render();
+  }
+}
+// ===== END SUPABASE AUTH + DATA SYNC =====
 
 const K={adam:{n:"Adam",a:"👦🏻",bal:320,month:320,year:3850,total:126,today:[["🪥","Gosok gigi pagi",5],["🛏️","Kemas katil",10],["📖","Baca buku 20 minit",10]]},aisyah:{n:"Aisyah",a:"🧕🏻",bal:275,month:380,year:3620,total:112,today:[["📚","Siapkan kerja sekolah",15],["🍽️","Kemas pinggan",10]]},zafran:{n:"Zafran",a:"🧒🏻",bal:210,month:210,year:2940,total:89,today:[["🧸","Kemas permainan",10]]}};
 let rewards=[["🍦","Aiskrim pilihan",100],["🎮","Main game 30 minit",150],["🎬","Pilih movie",200],["🍕","Makanan pilihan",300],["🧸","Mainan pilihan",500]];
@@ -183,27 +290,32 @@ function localDayKey(){
  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 function resetTodayIfNewDay(){
+ const dayStore=userDayKey();
+ if(!dayStore)return;
  let key=localDayKey(),last="";
- try{last=localStorage.getItem("localStorage.getItem("asuh_last_day_"+asuhSession.user.id)")||""}catch(e){}
+ try{last=localStorage.getItem(dayStore)||""}catch(e){}
  if(last && last!==key){
    Object.values(K).forEach(k=>{k.today=[]});
    saveLocal();
  }
- try{localStorage.setItem("localStorage.setItem("asuh_last_day_"+asuhSession.user.id,key)",key)}catch(e){}
+ try{localStorage.setItem(dayStore,key)}catch(e){}
+}
+function saveLocalOnly(){
+ const store=userStorageKey();
+ if(!store)return;
+ try{localStorage.setItem(store,JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
 }
 function saveLocal(){
- try{localStorage.setItem(""asuh_fasa1_"+asuhSession.user.id",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
+ saveLocalOnly();
  saveCloudData();
 }
 function loadLocal(){
+ const store=userStorageKey();
+ if(!store)return;
  try{
-  let d=JSON.parse(localStorage.getItem("let d=JSON.parse(localStorage.getItem("asuh_fasa1_"+asuhSession.user.id)||"null");")||"null");
+  let d=JSON.parse(localStorage.getItem(store)||"null");
   if(!d)return;
-  if(d.familyName)familyName=d.familyName;
-  if(Array.isArray(d.familyMembers))familyMembers=d.familyMembers;
-  if(d.K)Object.assign(K,d.K);
-  if(Array.isArray(d.rewards))rewards=d.rewards;
-  if(Array.isArray(d.savedTasks))savedTasks=d.savedTasks;
+  applyUserData(d);
  }catch(e){}
 }
 let quoteIndex=Math.floor(Math.random()*quotes.length);
@@ -347,7 +459,7 @@ function saveFamilyMember(){
  let n=fmName.value.trim(),b=fmBirth.value,r=fmRel.value,a=fmAv.value;if(!n||!b)return alert("Masukkan nama dan tarikh lahir.");
  familyMembers.push({name:n,relation:r,birth:b,avatar:a});
  if(r==="Anak"){let id="kid"+Date.now();K[id]={n:n,a:a,bal:0,month:0,year:0,total:0,today:[]}}
- S.classList.remove("on");page="profile";render()
+ saveLocal();S.classList.remove("on");page="profile";render()
 }
 function taskForm(){
  let k=K[cur],sorted=[...savedTasks].sort((a,b)=>b.uses-a.uses);
@@ -381,7 +493,7 @@ function newTaskForm(){
  <label>Bintang</label><div class="stars">${[5,10,15,20].map(n=>`<button class="${n==10?"on":""}" onclick="stars=${n};document.querySelectorAll('.stars button').forEach(x=>x.classList.remove('on'));this.classList.add('on')">⭐ ${n}</button>`).join("")}</div>
  <button class="save" onclick="saveTask()">Simpan & Beri Bintang</button>`
 }
-function saveTask(){let id=fc.value,n=tn.value.trim(),icon=ti.value;if(!n)return alert("Masukkan nama tugasan.");let existing=savedTasks.find(x=>x.name.toLowerCase()===n.toLowerCase());if(existing){existing.icon=icon;existing.stars=stars;existing.uses++}else{savedTasks.push({icon:icon,name:n,stars:stars,uses:1})}K[id].today.push([icon,n,stars]);K[id].bal+=stars;K[id].month+=stars;K[id].year+=stars;K[id].total++;cur=id;page="child";tab="tasks";saveLocal();S.classList.remove("on");render()}
+function saveTask(){let id=fc.value,n=tn.value.trim(),icon=ti.value;if(!n)return alert("Masukkan nama tugasan.");let existing=savedTasks.find(x=>x.name.toLowerCase()===n.toLowerCase());if(existing){existing.icon=icon;existing.stars=stars;existing.uses++}else{savedTasks.push({icon:icon,name:n,stars:stars,uses:1})}K[id].today.push([icon,n,stars]);K[id].bal+=stars;K[id].month+=stars;K[id].year+=stars;K[id].total++;saveLocal();cur=id;page="child";tab="tasks";S.classList.remove("on");render()}
 function rewardForm(){P.innerHTML=`<button class="close" onclick="S.classList.remove('on')">✕</button><h2>Tambah Ganjaran</h2><div class="sub">Ganjaran ini akan digunakan untuk semua anak.</div><label>Jenis ganjaran</label><input id="rn" placeholder="Contoh: Aiskrim pilihan"><label>Ikon</label><select id="ri"><option>🎁</option><option>🍦</option><option>🎮</option><option>🎬</option><option>🍕</option><option>🧸</option></select><label>Bintang diperlukan</label><input id="rc" type="number" min="1" value="100"><button class="save" onclick="saveReward()">Simpan Ganjaran</button>`;S.classList.add("on")}
 function saveReward(){let n=rn.value.trim(),c=+rc.value;if(!n||!c)return alert("Lengkapkan maklumat ganjaran.");rewards.push([ri.value,n,c]);saveLocal();S.classList.remove("on");rewardPage()}
 function redeem(i){
@@ -405,5 +517,9 @@ function confirmRedeem(i){
  rewardPage();
  alert(`${r[1]} berjaya ditebus untuk ${k.n}. ${r[2]} ⭐ ditolak daripada baki semasa.`);
 }
-document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{page=b.dataset.page;render()});document.getElementById("plus").onclick=taskForm;S.onclick=e=>{if(e.target==S)S.classList.remove("on")};try{localStorage.removeItem("asuh_supabase_session")}catch(e){} asuhSession=null; loadLocal();resetTodayIfNewDay();render();document.getElementById("authGate").classList.remove("authHidden");
+document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{page=b.dataset.page;render()});
+document.getElementById("plus").onclick=taskForm;
+S.onclick=e=>{if(e.target==S)S.classList.remove("on")};
+render();
+if(restoreAuth()){startUserData();}
 </script></body></html>
