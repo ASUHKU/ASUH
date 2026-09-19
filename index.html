@@ -781,7 +781,7 @@ input,select {
   display:none!important}
 
 </style>
-<!-- Firebase SDK + Auth: ASUH -->
+<!-- Firebase SDK + Auth + Firestore: ASUH -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
   import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
@@ -792,6 +792,13 @@ input,select {
     onAuthStateChanged,
     signOut
   } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    deleteDoc
+  } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBC1JNLFyJ-zDKKnVeBzVjVBvj_YRb8IjM",
@@ -805,6 +812,7 @@ input,select {
 
   const firebaseApp = initializeApp(firebaseConfig);
   const auth = getAuth(firebaseApp);
+  const db = getFirestore(firebaseApp);
 
   if (await isSupported()) {
     getAnalytics(firebaseApp);
@@ -813,10 +821,14 @@ input,select {
   window.ASUH_FIREBASE = {
     app: firebaseApp,
     auth: auth,
+    db: db,
     config: firebaseConfig
   };
 
   let authMode = "login";
+  let currentUid = null;
+  let saveTimer = null;
+  let cloudReady = false;
 
   function setAuthMessage(msg, ok = false) {
     const el = document.getElementById("authMsg");
@@ -876,15 +888,98 @@ input,select {
   }
 
   function asuhLogout() {
+    cloudReady = false;
+    currentUid = null;
     signOut(auth).catch(() => {});
   }
 
-  onAuthStateChanged(auth, (user) => {
+  function dataRef(uid) {
+    return doc(db, "users", uid, "app", "data");
+  }
+
+  function snapshotFromGlobals() {
+    // Read live state from the classic script scope via window helpers
+    if (typeof window.ASUH_GET_STATE === "function") {
+      return window.ASUH_GET_STATE();
+    }
+    return null;
+  }
+
+  function applyState(state) {
+    if (typeof window.ASUH_SET_STATE === "function") {
+      window.ASUH_SET_STATE(state);
+    }
+  }
+
+  async function loadCloudData(uid) {
+    try {
+      const snap = await getDoc(dataRef(uid));
+      if (snap.exists()) {
+        applyState(snap.data());
+        // also mirror to local cache
+        try {
+          localStorage.setItem("asuh_fasa1", JSON.stringify(snap.data()));
+        } catch (e) {}
+        return true;
+      }
+    } catch (e) {
+      console.warn("ASUH loadCloud failed", e);
+    }
+    return false;
+  }
+
+  async function saveCloudData(uid, state) {
+    if (!uid || !state) return;
+    try {
+      await setDoc(dataRef(uid), {
+        ...state,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (e) {
+      console.warn("ASUH saveCloud failed", e);
+    }
+  }
+
+  function scheduleCloudSave() {
+    if (!currentUid || !cloudReady) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const state = snapshotFromGlobals();
+      if (state) saveCloudData(currentUid, state);
+    }, 400);
+  }
+
+  async function deleteCloudData(uid) {
+    if (!uid) return;
+    try {
+      await deleteDoc(dataRef(uid));
+    } catch (e) {
+      console.warn("ASUH deleteCloud failed", e);
+    }
+  }
+
+  onAuthStateChanged(auth, async (user) => {
     const gate = document.getElementById("authGate");
     if (!gate) return;
     if (user) {
+      currentUid = user.uid;
       gate.classList.add("authHidden");
+      // Load cloud first; if empty, push local/defaults to cloud
+      const hadCloud = await loadCloudData(user.uid);
+      if (!hadCloud) {
+        // Prefer existing local data (migrate), else current defaults already in memory
+        try {
+          const local = JSON.parse(localStorage.getItem("asuh_fasa1") || "null");
+          if (local) applyState(local);
+        } catch (e) {}
+        const state = snapshotFromGlobals();
+        if (state) await saveCloudData(user.uid, state);
+      }
+      cloudReady = true;
+      if (typeof window.ASUH_AFTER_AUTH === "function") window.ASUH_AFTER_AUTH();
     } else {
+      cloudReady = false;
+      currentUid = null;
       gate.classList.remove("authHidden");
     }
   });
@@ -893,6 +988,9 @@ input,select {
   window.toggleAuthMode = toggleAuthMode;
   window.asuhLogout = asuhLogout;
   window.setAuthMessage = setAuthMessage;
+  window.ASUH_SCHEDULE_CLOUD_SAVE = scheduleCloudSave;
+  window.ASUH_DELETE_CLOUD = () => deleteCloudData(currentUid);
+  window.ASUH_CURRENT_UID = () => currentUid;
 
   window.dispatchEvent(new CustomEvent("asuh:firebase-ready"));
 </script>
@@ -973,29 +1071,45 @@ function resetTodayIfNewDay() {
     }
     catch (e) { }
 }
+function getAppState() {
+    return { familyName, familyMembers, K, rewards, savedTasks };
+}
+function applyAppState(d) {
+    if (!d) return;
+    if (d.familyName) familyName = d.familyName;
+    if (Array.isArray(d.familyMembers)) familyMembers = d.familyMembers;
+    if (d.K) {
+        // Replace kids map cleanly
+        Object.keys(K).forEach(k => delete K[k]);
+        Object.assign(K, d.K);
+        if (!K[cur]) cur = Object.keys(K)[0] || cur;
+    }
+    if (Array.isArray(d.rewards)) rewards = d.rewards;
+    if (Array.isArray(d.savedTasks)) savedTasks = d.savedTasks;
+}
+window.ASUH_GET_STATE = getAppState;
+window.ASUH_SET_STATE = function(d) {
+    applyAppState(d);
+    try { localStorage.setItem("asuh_fasa1", JSON.stringify(getAppState())); } catch (e) {}
+};
+window.ASUH_AFTER_AUTH = function() {
+    resetTodayIfNewDay();
+    render();
+};
 function saveLocal() {
     try {
-        localStorage.setItem("asuh_fasa1", JSON.stringify({ familyName, familyMembers, K, rewards, savedTasks }));
+        localStorage.setItem("asuh_fasa1", JSON.stringify(getAppState()));
+    } catch (e) {}
+    if (typeof window.ASUH_SCHEDULE_CLOUD_SAVE === "function") {
+        window.ASUH_SCHEDULE_CLOUD_SAVE();
     }
-    catch (e) { }
 }
 function loadLocal() {
     try {
         let d = JSON.parse(localStorage.getItem("asuh_fasa1") || "null");
-        if (!d)
-            return;
-        if (d.familyName)
-            familyName = d.familyName;
-        if (Array.isArray(d.familyMembers))
-            familyMembers = d.familyMembers;
-        if (d.K)
-            Object.assign(K, d.K);
-        if (Array.isArray(d.rewards))
-            rewards = d.rewards;
-        if (Array.isArray(d.savedTasks))
-            savedTasks = d.savedTasks;
-    }
-    catch (e) { }
+        if (!d) return;
+        applyAppState(d);
+    } catch (e) {}
 }
 let quoteIndex = Math.floor(Math.random() * quotes.length);
 let cur = "adam", page = "home", period = "month", stars = 10, tab = "tasks";
@@ -1079,8 +1193,9 @@ function profilePage() {
     V.innerHTML = `<section class="card"><div class="head"><div><h3>👨‍👩‍👧‍👦 Profil Keluarga</h3><span>${familyName} • ${familyMembers.length} ahli</span></div><div class="profileActions"><button class="settingsBtn" onclick="settingsForm()" title="Tetapan">⚙️</button><button class="editmini" onclick="familyForm()">＋ Ahli</button></div></div>
  <div class="sectionTitle">IBU BAPA</div>${memberRows(["Ayah", "Ibu", "Penjaga"])}
  <div class="sectionTitle">ANAK-ANAK</div>${memberRows(["Anak"])}
- <div class="dangerZone"><div class="dangerTitle">PENGURUSAN DATA</div>
- <button class="dangerBtn" onclick="deleteAllDataForm()">🗑️ Hapuskan Semua Data</button></div>
+ <div class="dangerZone"><div class="dangerTitle">AKAUN & DATA</div>
+ <button class="cancelBtn" style="margin-top:0" onclick="asuhLogout()">🚪 Log Keluar</button>
+ <button class="dangerBtn" style="margin-top:8px" onclick="deleteAllDataForm()">🗑️ Hapuskan Semua Data</button></div>
  </section>`;
 }
 function settingsForm() {
@@ -1153,8 +1268,10 @@ function confirmDeleteAll() {
         return alert('Taip "HAPUS" untuk mengesahkan.');
     try {
         localStorage.removeItem("asuh_fasa1");
+    } catch (e) {}
+    if (typeof window.ASUH_DELETE_CLOUD === "function") {
+        window.ASUH_DELETE_CLOUD();
     }
-    catch (e) { }
     location.reload();
 }
 function familyForm() {
@@ -1176,6 +1293,7 @@ function saveFamilyMember() {
         let id = "kid" + Date.now();
         K[id] = { n: n, a: a, bal: 0, month: 0, year: 0, total: 0, today: [] };
     }
+    saveLocal();
     S.classList.remove("on");
     page = "profile";
     render();
@@ -1233,7 +1351,7 @@ function saveTask() { let id = fc.value, n = tn.value.trim(), icon = ti.value; i
 }
 else {
     savedTasks.push({ icon: icon, name: n, stars: stars, uses: 1 });
-} K[id].today.push([icon, n, stars]); K[id].bal += stars; K[id].month += stars; K[id].year += stars; K[id].total++; cur = id; page = "child"; tab = "tasks"; S.classList.remove("on"); render(); }
+} K[id].today.push([icon, n, stars]); K[id].bal += stars; K[id].month += stars; K[id].year += stars; K[id].total++; cur = id; page = "child"; tab = "tasks"; saveLocal(); S.classList.remove("on"); render(); }
 function rewardForm() { P.innerHTML = `<button class="close" onclick="S.classList.remove('on')">✕</button><h2>Tambah Ganjaran</h2><div class="sub">Ganjaran ini akan digunakan untuk semua anak.</div><label>Jenis ganjaran</label><input id="rn" placeholder="Contoh: Aiskrim pilihan"><label>Ikon</label><select id="ri"><option>🎁</option><option>🍦</option><option>🎮</option><option>🎬</option><option>🍕</option><option>🧸</option></select><label>Bintang diperlukan</label><input id="rc" type="number" min="1" value="100"><button class="save" onclick="saveReward()">Simpan Ganjaran</button>`; S.classList.add("on"); }
 function saveReward() { let n = rn.value.trim(), c = +rc.value; if (!n || !c)
     return alert("Lengkapkan maklumat ganjaran."); rewards.push([ri.value, n, c]); saveLocal(); S.classList.remove("on"); rewardPage(); }
