@@ -123,12 +123,11 @@ async function loadCloudData(){
    if(d.K){Object.keys(K).forEach(x=>delete K[x]);Object.assign(K,d.K)}
    if(Array.isArray(d.rewards))rewards=d.rewards;
    if(Array.isArray(d.savedTasks))savedTasks=d.savedTasks;
-   try{localStorage.setItem("asuh_fasa1",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
+   try{localStorage.setItem("asuh_fasa1_"+asuhSession.user.id",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
    render();
    return true;
   }
-  await saveCloudData(true);
-  return false;
+  return false
  }catch(e){console.warn("ASUH cloud load:",e)}finally{cloudLoading=false}
  return false;
 }
@@ -185,20 +184,20 @@ function localDayKey(){
 }
 function resetTodayIfNewDay(){
  let key=localDayKey(),last="";
- try{last=localStorage.getItem("asuh_last_day")||""}catch(e){}
+ try{last=localStorage.getItem("localStorage.getItem("asuh_last_day_"+asuhSession.user.id)")||""}catch(e){}
  if(last && last!==key){
    Object.values(K).forEach(k=>{k.today=[]});
    saveLocal();
  }
- try{localStorage.setItem("asuh_last_day",key)}catch(e){}
+ try{localStorage.setItem("localStorage.setItem("asuh_last_day_"+asuhSession.user.id,key)",key)}catch(e){}
 }
 function saveLocal(){
- try{localStorage.setItem("asuh_fasa1",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
+ try{localStorage.setItem(""asuh_fasa1_"+asuhSession.user.id",JSON.stringify({familyName,familyMembers,K,rewards,savedTasks}))}catch(e){}
  saveCloudData();
 }
 function loadLocal(){
  try{
-  let d=JSON.parse(localStorage.getItem("asuh_fasa1")||"null");
+  let d=JSON.parse(localStorage.getItem("let d=JSON.parse(localStorage.getItem("asuh_fasa1_"+asuhSession.user.id)||"null");")||"null");
   if(!d)return;
   if(d.familyName)familyName=d.familyName;
   if(Array.isArray(d.familyMembers))familyMembers=d.familyMembers;
