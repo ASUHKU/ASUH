@@ -146,7 +146,7 @@ async function submitAuth(){
     }
 
     asuhSession=d;
-    try{localStorage.setItem("asuh_supabase_session",JSON.stringify(d))}catch(e){}
+    
     document.getElementById("authGate").classList.add("authHidden");
     setAuthMessage("");
     await startUserData();
@@ -155,14 +155,10 @@ async function submitAuth(){
   }
 }
 function restoreAuth(){
-  try{
-    const d=JSON.parse(localStorage.getItem("asuh_supabase_session")||"null");
-    if(d&&d.access_token&&d.user&&d.user.id){
-      asuhSession=d;
-      document.getElementById("authGate").classList.add("authHidden");
-      return true;
-    }
-  }catch(e){}
+  asuhSession=null;
+  try{localStorage.removeItem("asuh_supabase_session")}catch(e){}
+  const gate=document.getElementById("authGate");
+  if(gate)gate.classList.remove("authHidden");
   return false;
 }
 function asuhLogout(){
@@ -521,5 +517,5 @@ document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{page=b.datase
 document.getElementById("plus").onclick=taskForm;
 S.onclick=e=>{if(e.target==S)S.classList.remove("on")};
 render();
-if(restoreAuth()){startUserData();}
+restoreAuth();
 </script></body></html>
