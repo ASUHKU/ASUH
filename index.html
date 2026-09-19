@@ -945,8 +945,10 @@ input,select {
     if (!currentUid || !cloudReady) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
-      if (typeof window.ASUH_GET_STATE !== "function") return;
-      const state = window.ASUH_GET_STATE();
+      const state = typeof window.ASUH_GET_CLOUD_PAYLOAD === "function"
+        ? window.ASUH_GET_CLOUD_PAYLOAD()
+        : (typeof window.ASUH_GET_STATE === "function" ? window.ASUH_GET_STATE() : null);
+      if (!state) return;
       await saveCloudData(currentUid, state);
     }, 300);
   }
@@ -977,7 +979,9 @@ input,select {
         if (local && local.K) {
           window.ASUH_SET_STATE(local);
         }
-        const state = window.ASUH_GET_STATE();
+        const state = typeof window.ASUH_GET_CLOUD_PAYLOAD === "function"
+          ? window.ASUH_GET_CLOUD_PAYLOAD()
+          : window.ASUH_GET_STATE();
         await saveCloudData(user.uid, state);
       }
     } catch (e) {
@@ -1017,8 +1021,12 @@ input,select {
   window.ASUH_DELETE_CLOUD = () => deleteCloudData(currentUid);
   window.ASUH_CURRENT_UID = () => currentUid;
   window.ASUH_FORCE_SAVE = async function() {
-    if (!currentUid || typeof window.ASUH_GET_STATE !== "function") return false;
-    return await saveCloudData(currentUid, window.ASUH_GET_STATE());
+    if (!currentUid) return false;
+    const state = typeof window.ASUH_GET_CLOUD_PAYLOAD === "function"
+      ? window.ASUH_GET_CLOUD_PAYLOAD()
+      : (typeof window.ASUH_GET_STATE === "function" ? window.ASUH_GET_STATE() : null);
+    if (!state) return false;
+    return await saveCloudData(currentUid, state);
   };
 
   window.dispatchEvent(new CustomEvent("asuh:firebase-ready"));
@@ -1100,23 +1108,72 @@ function resetTodayIfNewDay() {
     }
     catch (e) { }
 }
+// Firestore tidak sokong nested arrays — convert semasa save/load
+function rewardsToCloud(list) {
+    return (list || []).map(r => Array.isArray(r)
+        ? { icon: r[0], name: r[1], cost: r[2] }
+        : r);
+}
+function rewardsFromCloud(list) {
+    return (list || []).map(r => Array.isArray(r)
+        ? r
+        : [r.icon || "🎁", r.name || "", Number(r.cost) || 0]);
+}
+function kidsToCloud(kids) {
+    const out = {};
+    Object.entries(kids || {}).forEach(([id, k]) => {
+        out[id] = {
+            n: k.n, a: k.a,
+            bal: k.bal, month: k.month, year: k.year, total: k.total,
+            today: (k.today || []).map(t => Array.isArray(t)
+                ? { icon: t[0], name: t[1], stars: t[2] }
+                : t)
+        };
+    });
+    return out;
+}
+function kidsFromCloud(kids) {
+    const out = {};
+    Object.entries(kids || {}).forEach(([id, k]) => {
+        out[id] = {
+            n: k.n, a: k.a,
+            bal: k.bal || 0, month: k.month || 0, year: k.year || 0, total: k.total || 0,
+            today: (k.today || []).map(t => Array.isArray(t)
+                ? t
+                : [t.icon || "⭐", t.name || "", Number(t.stars) || 0])
+        };
+    });
+    return out;
+}
 function getAppState() {
+    // Bentuk untuk localStorage (kekal format lama app)
     return { familyName, familyMembers, K, rewards, savedTasks };
+}
+function getCloudPayload() {
+    // Bentuk untuk Firestore (tiada nested array)
+    return {
+        familyName,
+        familyMembers,
+        K: kidsToCloud(K),
+        rewards: rewardsToCloud(rewards),
+        savedTasks: savedTasks || []
+    };
 }
 function applyAppState(d) {
     if (!d) return;
     if (d.familyName) familyName = d.familyName;
     if (Array.isArray(d.familyMembers)) familyMembers = d.familyMembers;
     if (d.K) {
-        // Replace kids map cleanly
+        const normalized = kidsFromCloud(d.K);
         Object.keys(K).forEach(k => delete K[k]);
-        Object.assign(K, d.K);
+        Object.assign(K, normalized);
         if (!K[cur]) cur = Object.keys(K)[0] || cur;
     }
-    if (Array.isArray(d.rewards)) rewards = d.rewards;
+    if (Array.isArray(d.rewards)) rewards = rewardsFromCloud(d.rewards);
     if (Array.isArray(d.savedTasks)) savedTasks = d.savedTasks;
 }
 window.ASUH_GET_STATE = getAppState;
+window.ASUH_GET_CLOUD_PAYLOAD = getCloudPayload;
 window.ASUH_SET_STATE = function(d) {
     applyAppState(d);
     try { localStorage.setItem("asuh_fasa1", JSON.stringify(getAppState())); } catch (e) {}
