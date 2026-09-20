@@ -1,5 +1,17 @@
-<!DOCTYPE html><html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ASUH Fasa 1</title><style>
+<!DOCTYPE html><html lang="ms"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ASUH</title>
+<meta name="description" content="Aplikasi keluarga untuk rekod tugasan, bintang dan ganjaran anak-anak.">
+<meta name="theme-color" content="#0e5e78">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ASUH">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+<style>
 /* ASUH — Vanilla CSS */
 :root {
   --t:#2fc3c7;
@@ -1618,4 +1630,16 @@ if (typeof window.ASUH_APP_READY === "function") {
     window.ASUH_APP_READY();
 }
 
-</script></body></html>
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((err) => {
+      console.warn("ASUH SW register failed:", err);
+    });
+  });
+}
+</script>
+
+</body></html>
