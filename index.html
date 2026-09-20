@@ -884,6 +884,13 @@ input,select {
     cloudReady = false;
     currentUid = null;
     pendingUser = null;
+    if (typeof window.ASUH_RESET_DEFAULTS === "function") {
+      window.ASUH_RESET_DEFAULTS();
+    }
+    if (typeof window.ASUH_AFTER_AUTH === "function") {
+      // re-render empty shell behind auth gate
+      try { window.ASUH_AFTER_AUTH(); } catch (e) {}
+    }
     signOut(auth).catch(() => {});
   }
 
@@ -921,13 +928,14 @@ input,select {
           const data = snap.data();
           window.ASUH_SET_STATE(data);
           try {
-            localStorage.setItem("asuh_fasa1", JSON.stringify({
+            localStorage.setItem("asuh_fasa1_" + uid, JSON.stringify({
               familyName: data.familyName,
               familyMembers: data.familyMembers,
               K: data.K,
               rewards: data.rewards,
               savedTasks: data.savedTasks
             }));
+            localStorage.setItem("asuh_last_uid", uid);
           } catch (e) {}
           console.log("[ASUH] Data cloud dimuatkan", data.updatedAt || "");
           return true;
@@ -999,11 +1007,20 @@ input,select {
     try {
       const hadCloud = await loadCloudData(user.uid);
       if (!hadCloud) {
-        // Migrate local or seed defaults to cloud
+        // Hanya guna cache lokal JIKA ia milik uid yang sama
         let local = null;
-        try { local = JSON.parse(localStorage.getItem("asuh_fasa1") || "null"); } catch (e) {}
-        if (local && local.K) {
+        try {
+          local = JSON.parse(localStorage.getItem("asuh_fasa1_" + user.uid) || "null");
+        } catch (e) {}
+        if (local && (local.K || local.familyName)) {
           window.ASUH_SET_STATE(local);
+          console.log("[ASUH] Guna cache lokal untuk uid ini");
+        } else {
+          // Akaun baru — JANGAN warisi data akaun lain
+          if (typeof window.ASUH_RESET_DEFAULTS === "function") {
+            window.ASUH_RESET_DEFAULTS();
+          }
+          console.log("[ASUH] Akaun baru — data kosong/default");
         }
         const state = typeof window.ASUH_GET_CLOUD_PAYLOAD === "function"
           ? window.ASUH_GET_CLOUD_PAYLOAD()
@@ -1137,7 +1154,37 @@ function resetTodayIfNewDay() {
     }
     catch (e) { }
 }
+// Template data bersih untuk akaun BARU (bukan warisi localStorage akaun lain)
+const ASUH_DEFAULTS = {
+    familyName: "Keluarga Saya",
+    familyMembers: [],
+    K: {},
+    rewards: [
+        { icon: "🍦", name: "Aiskrim pilihan", cost: 100 },
+        { icon: "🎮", name: "Main game 30 minit", cost: 150 },
+        { icon: "🎬", name: "Pilih movie", cost: 200 }
+    ],
+    savedTasks: [
+        { icon: "🪥", name: "Gosok gigi pagi", stars: 5, uses: 0 },
+        { icon: "🛏️", name: "Kemas katil", stars: 10, uses: 0 },
+        { icon: "📖", name: "Baca buku 20 minit", stars: 10, uses: 0 }
+    ]
+};
+function resetToDefaults() {
+    familyName = ASUH_DEFAULTS.familyName;
+    familyMembers = JSON.parse(JSON.stringify(ASUH_DEFAULTS.familyMembers));
+    Object.keys(K).forEach(k => delete K[k]);
+    // biar kosong — user tambah anak sendiri
+    rewards = rewardsFromCloud(ASUH_DEFAULTS.rewards);
+    savedTasks = JSON.parse(JSON.stringify(ASUH_DEFAULTS.savedTasks));
+    cur = Object.keys(K)[0] || "";
+}
+function localKeyFor(uid) {
+    return uid ? ("asuh_fasa1_" + uid) : "asuh_fasa1";
+}
+
 // Firestore tidak sokong nested arrays — convert semasa save/load
+
 function rewardsToCloud(list) {
     return (list || []).map(r => Array.isArray(r)
         ? { icon: r[0], name: r[1], cost: r[2] }
@@ -1205,15 +1252,24 @@ window.ASUH_GET_STATE = getAppState;
 window.ASUH_GET_CLOUD_PAYLOAD = getCloudPayload;
 window.ASUH_SET_STATE = function(d) {
     applyAppState(d);
-    try { localStorage.setItem("asuh_fasa1", JSON.stringify(getAppState())); } catch (e) {}
+    try {
+        const uid = typeof window.ASUH_CURRENT_UID === "function" ? window.ASUH_CURRENT_UID() : null;
+        const key = uid ? ("asuh_fasa1_" + uid) : "asuh_fasa1";
+        localStorage.setItem(key, JSON.stringify(getAppState()));
+        localStorage.setItem("asuh_last_uid", uid || "");
+    } catch (e) {}
 };
+window.ASUH_RESET_DEFAULTS = resetToDefaults;
 window.ASUH_AFTER_AUTH = function() {
     resetTodayIfNewDay();
     render();
 };
 function saveLocal() {
     try {
-        localStorage.setItem("asuh_fasa1", JSON.stringify(getAppState()));
+        const uid = typeof window.ASUH_CURRENT_UID === "function" ? window.ASUH_CURRENT_UID() : null;
+        const key = uid ? ("asuh_fasa1_" + uid) : "asuh_fasa1";
+        localStorage.setItem(key, JSON.stringify(getAppState()));
+        if (uid) localStorage.setItem("asuh_last_uid", uid);
     } catch (e) {}
     if (typeof window.ASUH_SCHEDULE_CLOUD_SAVE === "function") {
         window.ASUH_SCHEDULE_CLOUD_SAVE();
@@ -1221,7 +1277,12 @@ function saveLocal() {
 }
 function loadLocal() {
     try {
-        let d = JSON.parse(localStorage.getItem("asuh_fasa1") || "null");
+        const uid = typeof window.ASUH_CURRENT_UID === "function" ? window.ASUH_CURRENT_UID() : null;
+        const last = localStorage.getItem("asuh_last_uid") || "";
+        // Jangan load cache akaun lain
+        if (uid && last && last !== uid) return;
+        const key = uid ? ("asuh_fasa1_" + uid) : (last ? ("asuh_fasa1_" + last) : "asuh_fasa1");
+        let d = JSON.parse(localStorage.getItem(key) || localStorage.getItem("asuh_fasa1") || "null");
         if (!d) return;
         applyAppState(d);
     } catch (e) {}
