@@ -793,11 +793,14 @@ input,select {
     signOut
   } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
   import {
-    getFirestore,
+    initializeFirestore,
+    memoryLocalCache,
     doc,
     getDoc,
     setDoc,
-    deleteDoc
+    deleteDoc,
+    enableNetwork,
+    waitForPendingWrites
   } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -812,7 +815,11 @@ input,select {
 
   const firebaseApp = initializeApp(firebaseConfig);
   const auth = getAuth(firebaseApp);
-  const db = getFirestore(firebaseApp);
+  // longPolling bantu rangkaian yang blok WebChannel/WebSocket
+  const db = initializeFirestore(firebaseApp, {
+    experimentalForceLongPolling: true,
+    localCache: memoryLocalCache()
+  });
 
   if (await isSupported()) {
     getAnalytics(firebaseApp);
@@ -902,43 +909,62 @@ input,select {
     });
   }
 
+  async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
   async function loadCloudData(uid) {
-    const snap = await getDoc(dataRef(uid));
-    if (snap.exists()) {
-      const data = snap.data();
-      window.ASUH_SET_STATE(data);
-      try { localStorage.setItem("asuh_fasa1", JSON.stringify({
-        familyName: data.familyName,
-        familyMembers: data.familyMembers,
-        K: data.K,
-        rewards: data.rewards,
-        savedTasks: data.savedTasks
-      })); } catch (e) {}
-      console.log("[ASUH] Data cloud dimuatkan", data.updatedAt || "");
-      return true;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        await enableNetwork(db);
+        const snap = await getDoc(dataRef(uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          window.ASUH_SET_STATE(data);
+          try {
+            localStorage.setItem("asuh_fasa1", JSON.stringify({
+              familyName: data.familyName,
+              familyMembers: data.familyMembers,
+              K: data.K,
+              rewards: data.rewards,
+              savedTasks: data.savedTasks
+            }));
+          } catch (e) {}
+          console.log("[ASUH] Data cloud dimuatkan", data.updatedAt || "");
+          return true;
+        }
+        console.log("[ASUH] Tiada data cloud untuk uid ini");
+        return false;
+      } catch (e) {
+        lastErr = e;
+        console.warn("[ASUH] load cuba", attempt, e && e.code, e && e.message);
+        await sleep(600 * attempt);
+      }
     }
-    console.log("[ASUH] Tiada data cloud untuk uid ini");
-    return false;
+    throw lastErr || new Error("loadCloud failed");
   }
 
   async function saveCloudData(uid, state) {
     if (!uid || !state) return false;
-    try {
-      const payload = {
-        familyName: state.familyName,
-        familyMembers: state.familyMembers,
-        K: state.K,
-        rewards: state.rewards,
-        savedTasks: state.savedTasks,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(dataRef(uid), payload);
-      console.log("[ASUH] Data disimpan ke cloud", payload.updatedAt);
-      return true;
-    } catch (e) {
-      console.error("[ASUH] Gagal simpan cloud:", e && e.code, e && e.message);
-      return false;
+    const payload = {
+      familyName: state.familyName,
+      familyMembers: state.familyMembers,
+      K: state.K,
+      rewards: state.rewards,
+      savedTasks: state.savedTasks,
+      updatedAt: new Date().toISOString()
+    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await enableNetwork(db);
+        await setDoc(dataRef(uid), payload);
+        console.log("[ASUH] Data disimpan ke cloud", payload.updatedAt);
+        return true;
+      } catch (e) {
+        console.error("[ASUH] Gagal simpan cloud (cuba " + attempt + "):", e && e.code, e && e.message);
+        await sleep(500 * attempt);
+      }
     }
+    return false;
   }
 
   function scheduleCloudSave() {
@@ -986,7 +1012,10 @@ input,select {
       }
     } catch (e) {
       console.error("[ASUH] Sync error:", e && e.code, e && e.message);
-      // common: permission-denied if Firestore rules wrong / not created
+      if (e && (e.code === "unavailable" || String(e.message || "").includes("offline"))) {
+        console.warn("[ASUH] Offline / Firestore tidak dicapai. Guna data lokal. Pastikan Firestore Database sudah Create di Console.");
+      }
+      // App terus jalan dengan localStorage
     }
 
     cloudReady = true;
