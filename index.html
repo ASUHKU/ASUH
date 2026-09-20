@@ -1171,20 +1171,29 @@ function localDayKey() {
     let d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function resetTodayIfNewDay() {
-    let key = localDayKey(), last = "";
+let lastDayKey = "";
+function resetTodayIfNewDay(opts) {
+    const persist = !opts || opts.persist !== false;
+    let key = localDayKey();
+    let last = lastDayKey;
     try {
-        last = localStorage.getItem("asuh_last_day") || "";
-    }
-    catch (e) { }
+        last = last || localStorage.getItem("asuh_last_day") || "";
+    } catch (e) {}
+    lastDayKey = last;
+    // Jangan reset sebelum data cloud/local sebenar dimuatkan
+    if (opts && opts.onlyIfReady && !window.__ASUH_DATA_READY) return;
     if (last && last !== key) {
         Object.values(K).forEach(k => { k.today = []; });
-        saveLocal();
+        // Bintang (bal/month/year/total) TIDAK disentuh
+        lastDayKey = key;
+        try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
+        if (persist && window.__ASUH_DATA_READY) saveLocal();
+        console.log("[ASUH] Hari baru — tugasan hari ini dikosongkan, bintang kekal");
+        return true;
     }
-    try {
-        localStorage.setItem("asuh_last_day", key);
-    }
-    catch (e) { }
+    lastDayKey = key;
+    try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
+    return false;
 }
 // Template data bersih untuk akaun BARU (bukan warisi localStorage akaun lain)
 const ASUH_DEFAULTS = {
@@ -1270,7 +1279,7 @@ function kidsFromCloud(kids) {
 }
 function getAppState() {
     // Bentuk untuk localStorage (kekal format lama app)
-    return { familyName, familyMembers, K, rewards, savedTasks };
+    return { familyName, familyMembers, K, rewards, savedTasks, lastDayKey: lastDayKey || localDayKey() };
 }
 function getCloudPayload() {
     // Bentuk untuk Firestore (tiada nested array)
@@ -1279,7 +1288,8 @@ function getCloudPayload() {
         familyMembers,
         K: kidsToCloud(K),
         rewards: rewardsToCloud(rewards),
-        savedTasks: savedTasks || []
+        savedTasks: savedTasks || [],
+        lastDayKey: lastDayKey || localDayKey()
     };
 }
 function applyAppState(d) {
@@ -1294,6 +1304,7 @@ function applyAppState(d) {
     }
     if (Array.isArray(d.rewards)) rewards = rewardsFromCloud(d.rewards);
     if (Array.isArray(d.savedTasks)) savedTasks = d.savedTasks;
+    if (d.lastDayKey) lastDayKey = d.lastDayKey;
 }
 window.ASUH_GET_STATE = getAppState;
 window.ASUH_GET_CLOUD_PAYLOAD = getCloudPayload;
@@ -1308,7 +1319,8 @@ window.ASUH_SET_STATE = function(d) {
 };
 window.ASUH_RESET_DEFAULTS = resetToDefaults;
 window.ASUH_AFTER_AUTH = function() {
-    resetTodayIfNewDay();
+    window.__ASUH_DATA_READY = true;
+    resetTodayIfNewDay({ persist: true, onlyIfReady: true });
     render();
 };
 function saveLocal() {
@@ -1624,7 +1636,8 @@ document.getElementById("plus").onclick = taskForm;
 S.onclick = e => { if (e.target == S)
     S.classList.remove("on"); };
 loadLocal();
-resetTodayIfNewDay();
+window.__ASUH_DATA_READY = false;
+resetTodayIfNewDay({ persist: false });
 render();
 if (typeof window.ASUH_APP_READY === "function") {
     window.ASUH_APP_READY();
