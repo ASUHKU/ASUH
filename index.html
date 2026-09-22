@@ -1172,28 +1172,21 @@ function localDayKey() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 let lastDayKey = "";
-function resetTodayIfNewDay(opts) {
-    const persist = !opts || opts.persist !== false;
-    let key = localDayKey();
-    let last = lastDayKey;
-    try {
-        last = last || localStorage.getItem("asuh_last_day") || "";
-    } catch (e) {}
-    lastDayKey = last;
-    // Jangan reset sebelum data cloud/local sebenar dimuatkan
-    if (opts && opts.onlyIfReady && !window.__ASUH_DATA_READY) return;
-    if (last && last !== key) {
-        Object.values(K).forEach(k => { k.today = []; });
-        // Bintang (bal/month/year/total) TIDAK disentuh
-        lastDayKey = key;
-        try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
-        if (persist && window.__ASUH_DATA_READY) saveLocal();
-        console.log("[ASUH] Hari baru — tugasan hari ini dikosongkan, bintang kekal");
-        return true;
-    }
+function resetTodayIfNewDay() {
+    if (!window.__ASUH_DATA_READY) return false;
+    const key = localDayKey();
+    const last = lastDayKey || (function() {
+        try { return localStorage.getItem("asuh_last_day") || ""; } catch (e) { return ""; }
+    })();
+    if (last === key) return false;
+    // Hari baharu: kosongkan SENARAI tugasan hari ini sahaja
+    Object.values(K).forEach(k => { k.today = []; });
     lastDayKey = key;
     try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
-    return false;
+    saveLocal();
+    render();
+    console.log("[ASUH] Hari baru — tugasan harian dikosongkan. Bintang kekal.");
+    return true;
 }
 // Template data bersih untuk akaun BARU (bukan warisi localStorage akaun lain)
 const ASUH_DEFAULTS = {
@@ -1320,7 +1313,7 @@ window.ASUH_SET_STATE = function(d) {
 window.ASUH_RESET_DEFAULTS = resetToDefaults;
 window.ASUH_AFTER_AUTH = function() {
     window.__ASUH_DATA_READY = true;
-    resetTodayIfNewDay({ persist: true, onlyIfReady: true });
+    resetTodayIfNewDay();
     render();
 };
 function saveLocal() {
@@ -1637,11 +1630,15 @@ S.onclick = e => { if (e.target == S)
     S.classList.remove("on"); };
 loadLocal();
 window.__ASUH_DATA_READY = false;
-resetTodayIfNewDay({ persist: false });
 render();
 if (typeof window.ASUH_APP_READY === "function") {
     window.ASUH_APP_READY();
 }
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) resetTodayIfNewDay();
+});
+setInterval(() => { resetTodayIfNewDay(); }, 60000);
+
 
 </script>
 
