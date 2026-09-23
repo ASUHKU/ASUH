@@ -1167,9 +1167,29 @@ const quotes = [
     "Berikan ruang untuk anak belajar daripada kesilapan kecil dengan bimbingan yang tenang."
 ];
 let familyName = "Keluarga Harris";
+function malaysiaParts() {
+    const fmt = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kuala_Lumpur",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    });
+    const o = {};
+    fmt.formatToParts(new Date()).forEach(p => { o[p.type] = p.value; });
+    return o;
+}
 function localDayKey() {
-    let d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // Hari tugasan ikut Malaysia. Reset bermula 11:59 malam.
+    const p = malaysiaParts();
+    let y = +p.year, m = +p.month, d = +p.day;
+    const hh = +p.hour, mm = +p.minute;
+    if (hh > 23 || (hh === 23 && mm >= 59)) {
+        const dt = new Date(Date.UTC(y, m - 1, d));
+        dt.setUTCDate(dt.getUTCDate() + 1);
+        y = dt.getUTCFullYear();
+        m = dt.getUTCMonth() + 1;
+        d = dt.getUTCDate();
+    }
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 let lastDayKey = "";
 function resetTodayIfNewDay() {
@@ -1450,8 +1470,25 @@ function editMemberForm(idx) {
  <label>Hubungan</label><select id="emRel">${["Ayah", "Ibu", "Anak", "Penjaga"].map(r => `<option ${r === m.relation ? "selected" : ""}>${r}</option>`).join("")}</select>
  <label>Avatar</label><select id="emAv">${["👨🏻", "👩🏻", "👦🏻", "👧🏻", "🧒🏻", "🧕🏻", "👤"].map(a => `<option ${a === m.avatar ? "selected" : ""}>${a}</option>`).join("")}</select>
  <label>Tarikh lahir</label><input id="emBirth" type="date" value="${m.birth}">
- <button class="save" onclick="saveMemberEdit(${idx})">Simpan Perubahan</button>`;
+ <button class="save" onclick="saveMemberEdit(${idx})">Simpan Perubahan</button>
+ <button class="dangerBtn" style="margin-top:10px" onclick="deleteMember(${idx})">🗑️ Padam Ahli Ini</button>`;
     S.classList.add("on");
+}
+function deleteMember(idx) {
+    let m = familyMembers[idx];
+    if (!m) return;
+    if (!confirm(`Padam ${m.name}? Data bintang dan tugasan ahli ini akan turut dipadam.`)) return;
+    familyMembers.splice(idx, 1);
+    let kidEntry = Object.entries(K).find(([id, k]) => k.n === m.name);
+    if (kidEntry) {
+        let [id] = kidEntry;
+        delete K[id];
+        if (cur === id) cur = Object.keys(K)[0] || "";
+    }
+    saveLocal();
+    S.classList.remove("on");
+    page = "profile";
+    render();
 }
 function saveMemberEdit(idx) {
     let old = familyMembers[idx], oldName = old.name, n = emName.value.trim(), r = emRel.value, a = emAv.value, b = emBirth.value;
