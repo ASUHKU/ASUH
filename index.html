@@ -804,6 +804,203 @@ input,select {
 .authHidden {
   display:none!important}
 
+
+/* ASUH visual refresh — fungsi tidak berubah */
+.av, .big, .fav {
+  overflow:hidden;
+  padding:0;
+}
+.av img, .big img, .fav img, .kidface, .heroface, .rowface {
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover;
+  display:block;
+}
+.kidface, .heroface, .rowface {
+  border-radius:50%;
+}
+.av {
+  width:64px;
+  height:64px;
+  background:#dff6f4;
+  border:3px solid #ffffff;
+  box-shadow:0 4px 10px #0e5e7814;
+}
+.kid.on .av {
+  border-color:var(--t);
+  box-shadow:0 0 0 3px #2fc3c733;
+}
+.kid b {
+  margin-top:6px;
+  font-size:12px;
+  color:var(--d);
+}
+.kids {
+  gap:16px;
+  padding:4px 2px 8px;
+}
+.quoteCard {
+  background:#fff;
+  border-radius:22px;
+  padding:16px 16px 14px;
+}
+.quoteTop b {
+  font-size:15px;
+  font-weight:800;
+}
+.quoteText {
+  font-size:13px;
+  color:#3a5560;
+}
+.card h3 {
+  font-size:16px;
+  color:var(--d);
+}
+.familyrow, .quicktask {
+  padding:12px 0;
+}
+.fname, .qname, .name {
+  font-size:14px;
+}
+.score {
+  font-size:28px;
+}
+.big {
+  width:86px;
+  height:86px;
+  border:3px solid #fff;
+  box-shadow:0 8px 18px #0e5e7818;
+  background:#e8f8f7;
+}
+.prof h2 {
+  font-size:22px;
+  color:var(--d);
+}
+.homeKid {
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border:0;
+  background:#fff;
+  padding:10px 4px;
+  text-align:left;
+  color:var(--i);
+  border-bottom:1px solid #edf3f3;
+}
+.homeKid .rowface {
+  width:46px;
+  height:46px;
+  flex:none;
+  background:#e8f8f7;
+}
+.homeKid .qname {
+  flex:1;
+  font-size:15px;
+  font-weight:800;
+  color:var(--d);
+}
+.homeKid .qpts {
+  font-size:14px;
+}
+
+
+/* ===== Mockup layout (fungsi kekal) ===== */
+body { background:#d9f3f1; }
+.app {
+  max-width:430px;
+  background:linear-gradient(#eefbf9 0%, #e7f7f5 55%, #cfeeea 100%);
+  padding:18px 16px 100px;
+}
+.top { align-items:flex-start; }
+.brandLogoImg { width:118px; height:auto; max-height:52px; object-fit:contain; mix-blend-mode:multiply; }
+.brandTagline {
+  font-size:11px;
+  font-weight:700;
+  color:#0e5e78;
+  max-width:170px;
+  line-height:1.25;
+}
+.family {
+  background:#fff;
+  border-radius:20px;
+  padding:8px 12px;
+  font-size:12px;
+  color:#0e5e78;
+  box-shadow:0 4px 14px #0e5e7812;
+}
+.kids { margin:8px 0 16px; gap:12px; justify-content:flex-start; }
+.kid { min-width:76px; }
+.av {
+  width:74px; height:74px;
+  border:3px solid #fff;
+  box-shadow:0 6px 16px #0e5e7818;
+  background:#fff;
+}
+.kid.on .av {
+  border:4px solid #2fc3c7;
+  box-shadow:0 0 0 4px #2fc3c733;
+}
+.kid b { font-size:12px; font-weight:800; color:#0e5e78; margin-top:7px; }
+.quoteCard {
+  background:#fff;
+  border-radius:24px;
+  padding:18px 16px;
+  box-shadow:0 10px 24px #0e5e780c;
+}
+.quoteTop b { font-size:16px; color:#0e5e78; }
+.quoteText { font-size:13.5px; line-height:1.45; color:#3d5560; margin-top:6px; }
+.card {
+  background:#fff;
+  border-radius:22px;
+  box-shadow:0 10px 24px #0e5e780c;
+  padding:14px 14px 8px;
+}
+.card h3 { font-size:16px; color:#0e5e78; }
+.head span { font-size:12px; }
+.homeKid {
+  background:#f7fbfb;
+  border:0;
+  border-radius:16px;
+  margin:8px 0;
+  padding:10px 12px;
+  border-bottom:0;
+}
+.homeKid .rowface, .homeKid .rowface img {
+  width:42px !important; height:42px !important;
+  border-radius:50%;
+}
+.homeKid .qname { font-size:16px; font-weight:800; color:#0e5e78; }
+.homeKid .qpts { font-size:14px; font-weight:800; color:#d4a017; }
+.big { width:92px; height:92px; border:3px solid #fff; }
+.prof h2 { font-size:24px; }
+.score { font-size:30px; }
+.bottom {
+  height:84px;
+  background:transparent;
+  border:0;
+  padding-bottom:8px;
+}
+.bottom:before {
+  content:"";
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:64px;
+  background:#fff;
+  border-radius:22px 22px 0 0;
+  box-shadow:0 -8px 24px #0e5e7810;
+}
+.nav { position:relative; z-index:1; font-size:11px; color:#8aa0a8; }
+.nav.on { color:#0c9ea5; }
+.add {
+  width:58px; height:58px;
+  margin-top:-28px;
+  border:5px solid #e7f7f5;
+  background:#2fc3c7;
+  box-shadow:0 10px 18px #1aaeb555 !important;
+}
+.addnav span { display:none; }
+
 </style>
 <!-- Firebase SDK + Auth + Firestore: ASUH -->
 <script type="module">
@@ -1195,11 +1392,18 @@ let lastDayKey = "";
 function resetTodayIfNewDay() {
     if (!window.__ASUH_DATA_READY) return false;
     const key = localDayKey();
-    const last = lastDayKey || (function() {
-        try { return localStorage.getItem("asuh_last_day") || ""; } catch (e) { return ""; }
-    })();
+    let last = lastDayKey;
+    try {
+        if (!last) last = localStorage.getItem("asuh_last_day") || "";
+    } catch (e) { last = ""; }
+    // Kali pertama / tiada tarikh lama: CAP hari ini sahaja, JANGAN kosongkan tugasan
+    if (!last) {
+        lastDayKey = key;
+        try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
+        return false;
+    }
     if (last === key) return false;
-    // Hari baharu: kosongkan SENARAI tugasan hari ini sahaja
+    // Hari benar-benar baharu (lepas 11:59 malam MYT): kosongkan SENARAI hari ini sahaja
     Object.values(K).forEach(k => { k.today = []; });
     lastDayKey = key;
     try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
@@ -1362,8 +1566,10 @@ function loadLocal() {
 let quoteIndex = Math.floor(Math.random() * quotes.length);
 let cur = "adam", page = "home", period = "month", stars = 10, tab = "tasks";
 const V = document.getElementById("view"), S = document.getElementById("sheet"), P = document.getElementById("panel");
+
 function kids() { document.getElementById("kids").innerHTML = Object.entries(K).map(([id, k]) => `<button class="kid ${id == cur && (page == "child" || page == "rewards") ? "on" : ""}" onclick="cur='${id}';if(page!='rewards'){page='child';tab='tasks'}render()"><div class="av">${k.a}</div><b>${k.n}</b></button>`).join(""); }
-function hero() { let k = K[cur]; return `<section class="card"><div class="prof"><div class="big">${k.a}</div><div><h2>${k.n}</h2><div class="sub">Teruskan usaha, ${k.n}! 💪</div></div><div class="score">${k.bal}</div></div></section>`; }
+function hero() { let k = K[cur]; if (!k) return ""; return `<section class="card"><div class="prof"><div class="big">${k.a}</div><div><h2>${k.n}</h2><div class="sub">Teruskan usaha, ${k.n}!</div></div><div class="score">${k.bal}</div></div></section>`; }
+
 function render() { let fn = document.getElementById("familyNameText"); if (fn)
     fn.textContent = familyName; kids(); document.querySelectorAll("[data-page]").forEach(x => x.classList.toggle("on", x.dataset.page == page)); if (page == "home")
     familyHome(); if (page == "child")
@@ -1371,15 +1577,15 @@ function render() { let fn = document.getElementById("familyNameText"); if (fn)
     rewardPage(); if (page == "report")
     report(); if (page == "profile")
     profilePage(); }
-function quoteCard() { return `<section class="quoteCard"><div class="quoteTop"><b>🌿 Pesanan Hari Ini</b><button class="refresh" onclick="nextQuote()" title="Pesanan lain">↻</button></div><div class="quoteText">${quotes[quoteIndex]}</div></section>`; }
+function quoteCard() { return `<section class="quoteCard"><div class="quoteTop"><b>Pesanan Hari Ini</b><button class="refresh" onclick="nextQuote()" title="Pesanan lain">↻</button></div><div class="quoteText">${quotes[quoteIndex]}</div></section>`; }
 function nextQuote() { let old = quoteIndex; while (quotes.length > 1 && quoteIndex === old)
     quoteIndex = Math.floor(Math.random() * quotes.length); familyHome(); }
 function familyHome() {
     let total = Object.values(K).reduce((s, k) => s + k.bal, 0);
     V.innerHTML = quoteCard() + `<section class="card">
- <div class="head"><div><h3>👨‍👩‍👧‍👦 Anak-anak</h3><span>Pilih anak untuk lihat halaman mereka</span></div></div>
- ${Object.entries(K).map(([id, k]) => `<button class="quicktask" onclick="cur='${id}';page='child';tab='tasks';render()">
-   <div class="qico">${k.a}</div><div class="qname">${k.n}</div><div class="qpts">⭐ ${k.bal}</div>
+ <div class="head"><div><h3>Anak-anak Saya</h3><span>Pilih anak untuk lihat halaman mereka</span></div></div>
+ ${Object.entries(K).map(([id, k]) => `<button class="homeKid" onclick="cur='${id}';page='child';tab='tasks';render()">
+   <div class="rowface">${k.a}</div><div class="qname">${k.n}</div><div class="qpts">⭐ ${k.bal}</div>
  </button>`).join("")}
  <div class="total">Jumlah baki bintang keluarga<strong>⭐ ${total.toLocaleString()}</strong></div>
  </section>`;
@@ -1435,7 +1641,7 @@ function niceDate(birth) {
     return d.toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
 }
 function memberRows(relations) {
-    return familyMembers.filter(x => relations.includes(x.relation)).map((m) => { let idx = familyMembers.indexOf(m); return `<div class="familyrow"><div class="fav">${m.avatar}</div><div class="fbody"><div class="fline"><div class="fname">${m.name}</div><div class="profileActions"><div class="fage">${ageFromBirth(m.birth)} tahun</div><button class="memberEdit" onclick="editMemberForm(${idx})">Edit</button></div></div><div class="fmeta">${m.relation} • 🎂 ${niceDate(m.birth)}</div></div></div>`; }).join("");
+    return familyMembers.filter(x => relations.includes(x.relation)).map((m) => { let idx = familyMembers.indexOf(m); return `<div class="familyrow"><div class="fav">${m.avatar}</div><div class="fbody"><div class="fline"><div class="fname">${m.name}</div><div class="profileActions"><div class="fage">${ageFromBirth(m.birth)} tahun</div><button class="memberEdit" onclick="editMemberForm(${idx})">Edit</button><button class="memberEdit" style="background:#fff1f1;color:#b44747" onclick="deleteMember(${idx})">Padam</button></div></div><div class="fmeta">${m.relation} • 🎂 ${niceDate(m.birth)}</div></div></div>`; }).join("");
 }
 function profilePage() {
     V.innerHTML = `<section class="card"><div class="head"><div><h3>👨‍👩‍👧‍👦 Profil Keluarga</h3><span>${familyName} • ${familyMembers.length} ahli</span></div><div class="profileActions"><button class="settingsBtn" onclick="settingsForm()" title="Tetapan">⚙️</button><button class="editmini" onclick="familyForm()">＋ Ahli</button></div></div>
