@@ -1001,6 +1001,20 @@ body { background:#d9f3f1; }
 }
 .addnav span { display:none; }
 
+
+.av img.avimg, .big img.avimg, .rowface img.avimg, .fav img.avimg {
+  width:100%;
+  height:100%;
+  border-radius:50%;
+  object-fit:cover;
+  display:block;
+}
+.av, .big { overflow:hidden; padding:0; }
+.rowface {
+  width:42px; height:42px; border-radius:50%; overflow:hidden;
+  display:grid; place-items:center; background:#e1f6f5; flex:none;
+}
+
 </style>
 <!-- Firebase SDK + Auth + Firestore: ASUH -->
 <script type="module">
@@ -1375,41 +1389,45 @@ function malaysiaParts() {
     return o;
 }
 function localDayKey() {
-    // Hari tugasan ikut Malaysia. Reset bermula 11:59 malam.
+    // Hari tugasan = tarikh kalendar Malaysia (Asia/Kuala_Lumpur).
+    // Senarai "Tugasan Selesai Hari Ini" dikosongkan selepas tengah malam MYT sahaja.
     const p = malaysiaParts();
-    let y = +p.year, m = +p.month, d = +p.day;
-    const hh = +p.hour, mm = +p.minute;
-    if (hh > 23 || (hh === 23 && mm >= 59)) {
-        const dt = new Date(Date.UTC(y, m - 1, d));
-        dt.setUTCDate(dt.getUTCDate() + 1);
-        y = dt.getUTCFullYear();
-        m = dt.getUTCMonth() + 1;
-        d = dt.getUTCDate();
-    }
-    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    return `${p.year}-${p.month}-${p.day}`;
+}
+function lastDayStorageKey() {
+    try {
+        const uid = typeof window.ASUH_CURRENT_UID === "function" ? window.ASUH_CURRENT_UID() : null;
+        return uid ? ("asuh_last_day_" + uid) : "asuh_last_day";
+    } catch (e) { return "asuh_last_day"; }
 }
 let lastDayKey = "";
+function readLastDayKey() {
+    if (lastDayKey) return lastDayKey;
+    try { return localStorage.getItem(lastDayStorageKey()) || ""; } catch (e) { return ""; }
+}
+function writeLastDayKey(key) {
+    lastDayKey = key;
+    try { localStorage.setItem(lastDayStorageKey(), key); } catch (e) {}
+}
 function resetTodayIfNewDay() {
     if (!window.__ASUH_DATA_READY) return false;
     const key = localDayKey();
-    let last = lastDayKey;
-    try {
-        if (!last) last = localStorage.getItem("asuh_last_day") || "";
-    } catch (e) { last = ""; }
-    // Kali pertama / tiada tarikh lama: CAP hari ini sahaja, JANGAN kosongkan tugasan
+    const last = readLastDayKey();
+    // Tiada rekod tarikh: CAP hari ini, JANGAN kosongkan tugasan / bintang
     if (!last) {
-        lastDayKey = key;
-        try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
+        writeLastDayKey(key);
         return false;
     }
+    // Masih hari yang sama
     if (last === key) return false;
-    // Hari benar-benar baharu (lepas 11:59 malam MYT): kosongkan SENARAI hari ini sahaja
-    Object.values(K).forEach(k => { k.today = []; });
-    lastDayKey = key;
-    try { localStorage.setItem("asuh_last_day", key); } catch (e) {}
+    // Hari baharu sahaja: kosongkan SENARAI tugasan hari ini. Bintang (bal/month/year/total) TIDAK disentuh.
+    Object.values(K).forEach(k => {
+        if (k && Array.isArray(k.today)) k.today = [];
+    });
+    writeLastDayKey(key);
     saveLocal();
     render();
-    console.log("[ASUH] Hari baru — tugasan harian dikosongkan. Bintang kekal.");
+    console.log("[ASUH] Hari baru (" + last + " → " + key + ") — tugasan harian dikosongkan. Bintang kekal.");
     return true;
 }
 // Template data bersih untuk akaun BARU (bukan warisi localStorage akaun lain)
@@ -1521,7 +1539,10 @@ function applyAppState(d) {
     }
     if (Array.isArray(d.rewards)) rewards = rewardsFromCloud(d.rewards);
     if (Array.isArray(d.savedTasks)) savedTasks = d.savedTasks;
-    if (d.lastDayKey) lastDayKey = d.lastDayKey;
+    if (d.lastDayKey) {
+        lastDayKey = d.lastDayKey;
+        try { localStorage.setItem(lastDayStorageKey(), d.lastDayKey); } catch (e) {}
+    }
 }
 window.ASUH_GET_STATE = getAppState;
 window.ASUH_GET_CLOUD_PAYLOAD = getCloudPayload;
@@ -1567,8 +1588,31 @@ let quoteIndex = Math.floor(Math.random() * quotes.length);
 let cur = "adam", page = "home", period = "month", stars = 10, tab = "tasks";
 const V = document.getElementById("view"), S = document.getElementById("sheet"), P = document.getElementById("panel");
 
-function kids() { document.getElementById("kids").innerHTML = Object.entries(K).map(([id, k]) => `<button class="kid ${id == cur && (page == "child" || page == "rewards") ? "on" : ""}" onclick="cur='${id}';if(page!='rewards'){page='child';tab='tasks'}render()"><div class="av">${k.a}</div><b>${k.n}</b></button>`).join(""); }
-function hero() { let k = K[cur]; if (!k) return ""; return `<section class="card"><div class="prof"><div class="big">${k.a}</div><div><h2>${k.n}</h2><div class="sub">Teruskan usaha, ${k.n}!</div></div><div class="score">${k.bal}</div></div></section>`; }
+
+// Avatar gambar sebenar (fail PNG sebaris dengan index.html di GitHub)
+const AVATAR_IMG = {
+    "👨🏻": "avatar-dad.png",
+    "👩🏻": "avatar-mom.png",
+    "👦🏻": "avatar-boy.png",
+    "👧": "avatar-girl.png",
+    "👧🏻": "avatar-girl.png",
+    "🧑🏻": "avatar-teen.png",
+    "🧒🏻": "avatar-teen.png",
+    "👷🏻": "avatar-teen.png",
+    "🧕": "avatar-hijab.png",
+    "🧕🏻": "avatar-hijab.png"
+};
+function avatarHTML(a, size) {
+    size = size || 55;
+    const src = AVATAR_IMG[a];
+    if (src) {
+        return `<img class="avimg" src="${src}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block;">`;
+    }
+    return a || "👤";
+}
+
+function kids() { document.getElementById("kids").innerHTML = Object.entries(K).map(([id, k]) => `<button class="kid ${id == cur && (page == "child" || page == "rewards") ? "on" : ""}" onclick="cur='${id}';if(page!='rewards'){page='child';tab='tasks'}render()"><div class="av">${avatarHTML(k.a, 55)}</div><b>${k.n}</b></button>`).join(""); }
+function hero() { let k = K[cur]; if (!k) return ""; return `<section class="card"><div class="prof"><div class="big">${avatarHTML(k.a, 72)}</div><div><h2>${k.n}</h2><div class="sub">Teruskan usaha, ${k.n}!</div></div><div class="score">${k.bal}</div></div></section>`; }
 
 function render() { let fn = document.getElementById("familyNameText"); if (fn)
     fn.textContent = familyName; kids(); document.querySelectorAll("[data-page]").forEach(x => x.classList.toggle("on", x.dataset.page == page)); if (page == "home")
@@ -1585,7 +1629,7 @@ function familyHome() {
     V.innerHTML = quoteCard() + `<section class="card">
  <div class="head"><div><h3>Anak-anak Saya</h3><span>Pilih anak untuk lihat halaman mereka</span></div></div>
  ${Object.entries(K).map(([id, k]) => `<button class="homeKid" onclick="cur='${id}';page='child';tab='tasks';render()">
-   <div class="rowface">${k.a}</div><div class="qname">${k.n}</div><div class="qpts">⭐ ${k.bal}</div>
+   <div class="rowface">${avatarHTML(k.a, 42)}</div><div class="qname">${k.n}</div><div class="qpts">⭐ ${k.bal}</div>
  </button>`).join("")}
  <div class="total">Jumlah baki bintang keluarga<strong>⭐ ${total.toLocaleString()}</strong></div>
  </section>`;
@@ -1613,7 +1657,7 @@ function childPage() {
     else {
         let fm = familyMembers.find(x => x.name === k.n && x.relation === "Anak");
         V.innerHTML = hero() + childTabs() + `<section class="card"><div class="head"><h3>👤 Maklumat ${k.n}</h3></div>
-   ${fm ? `<div class="familyrow"><div class="fav">${fm.avatar}</div><div class="fbody"><div class="fline"><div class="fname">${fm.name}</div><div class="fage">${ageFromBirth(fm.birth)} tahun</div></div><div class="fmeta">🎂 ${niceDate(fm.birth)}</div></div></div>` : ""}
+   ${fm ? `<div class="familyrow"><div class="fav">${avatarHTML(fm.avatar, 38)}</div><div class="fbody"><div class="fline"><div class="fname">${fm.name}</div><div class="fage">${ageFromBirth(fm.birth)} tahun</div></div><div class="fmeta">🎂 ${niceDate(fm.birth)}</div></div></div>` : ""}
    </section>`;
     }
 }
@@ -1641,7 +1685,7 @@ function niceDate(birth) {
     return d.toLocaleDateString("ms-MY", { day: "numeric", month: "short", year: "numeric" });
 }
 function memberRows(relations) {
-    return familyMembers.filter(x => relations.includes(x.relation)).map((m) => { let idx = familyMembers.indexOf(m); return `<div class="familyrow"><div class="fav">${m.avatar}</div><div class="fbody"><div class="fline"><div class="fname">${m.name}</div><div class="profileActions"><div class="fage">${ageFromBirth(m.birth)} tahun</div><button class="memberEdit" onclick="editMemberForm(${idx})">Edit</button><button class="memberEdit" style="background:#fff1f1;color:#b44747" onclick="deleteMember(${idx})">Padam</button></div></div><div class="fmeta">${m.relation} • 🎂 ${niceDate(m.birth)}</div></div></div>`; }).join("");
+    return familyMembers.filter(x => relations.includes(x.relation)).map((m) => { let idx = familyMembers.indexOf(m); return `<div class="familyrow"><div class="fav">${avatarHTML(m.avatar, 38)}</div><div class="fbody"><div class="fline"><div class="fname">${m.name}</div><div class="profileActions"><div class="fage">${ageFromBirth(m.birth)} tahun</div><button class="memberEdit" onclick="editMemberForm(${idx})">Edit</button><button class="memberEdit" style="background:#fff1f1;color:#b44747" onclick="deleteMember(${idx})">Padam</button></div></div><div class="fmeta">${m.relation} • 🎂 ${niceDate(m.birth)}</div></div></div>`; }).join("");
 }
 function profilePage() {
     V.innerHTML = `<section class="card"><div class="head"><div><h3>👨‍👩‍👧‍👦 Profil Keluarga</h3><span>${familyName} • ${familyMembers.length} ahli</span></div><div class="profileActions"><button class="settingsBtn" onclick="settingsForm()" title="Tetapan">⚙️</button><button class="editmini" onclick="familyForm()">＋ Ahli</button></div></div>
@@ -1749,6 +1793,11 @@ function confirmDeleteAll() {
         }
         localStorage.removeItem("asuh_fasa1");
         localStorage.removeItem("asuh_last_day");
+        try {
+            const uid2 = typeof window.ASUH_CURRENT_UID === "function" ? window.ASUH_CURRENT_UID() : null;
+            if (uid2) localStorage.removeItem("asuh_last_day_" + uid2);
+        } catch (e2) {}
+        lastDayKey = "";
     } catch (e) {}
     // Tulis semula data kosong ke cloud (bukan padam dokumen sahaja)
     if (typeof window.ASUH_FORCE_SAVE === "function") {
